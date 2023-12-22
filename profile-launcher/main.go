@@ -18,10 +18,17 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,6 +41,7 @@ type Container struct {
 	DockerImage              string   `yaml:"DockerImage"`
 	EnvironmentVariableFiles string   `yaml:"EnvironmentVariableFiles"`
 	Volumes                  []string `yaml:"Volumes"`
+	Entrypoint               string   `yaml:"Entrypoint"`
 }
 
 // docker run --network host --user root --ipc=host \
@@ -45,14 +53,43 @@ type Container struct {
 // $volFullExpand \
 // "$DOCKER_IMAGE" \
 // bash -c '$DOCKER_CMD'
+type envOverrideFlags []string
 
 func main() {
-	configDir := "/home/intel/projects/intel-retail/core-services/profile-launcher/test-profile/test_conf.yaml"
-	GetYamlConfig(configDir)
+	var configDir string
+	var volumes string
+	var envOverrides string
+	flag.StringVar(&configDir, "configdir", "./test-profile", "Directory with the profile config")
+	flag.StringVar(&volumes, "v", "", "Volume mount for the container")
+	flag.StringVar(&envOverrides, "e", "", "Environment overridees for the container")
+	flag.Parse()
+	fmt.Println(volumes)
+	fmt.Println(envOverrides)
+
+	containersArray := GetYamlConfig(configDir)
+	envArray := GetEnv(configDir)
+	// for _, env := range envArray {
+	// 	fmt.Println("env:")
+	// 	fmt.Println(env)
+	// }
+
+	// Setup Docker CLI
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+	defer cli.Close()
+
+	// Run each container found in config
+	for _, cont := range containersArray.Containers {
+		DockerStartContainer(cont, ctx, cli, envArray)
+	}
 }
 
-func GetYamlConfig(configDir string) {
-	contents, err := os.ReadFile(configDir)
+func GetYamlConfig(configDir string) Containers {
+	profileConfigPath := filepath.Join(configDir, "profile_config.yaml")
+	contents, err := os.ReadFile(profileConfigPath)
 	if err != nil {
 		err = fmt.Errorf("Unable to read config file: %v, error: %v",
 			configDir, err)
@@ -63,10 +100,36 @@ func GetYamlConfig(configDir string) {
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	fmt.Println(contents)
-	fmt.Printf("%+v\n", containersArray)
+
+	return containersArray
 }
 
-func DockerStart() {
+func GetEnv(configDir string) []string {
+	profileConfigPath := filepath.Join(configDir, "profile.env")
+	contents, err := os.ReadFile(profileConfigPath)
+	if err != nil {
+		err = fmt.Errorf("Unable to read config file: %v, error: %v",
+			configDir, err)
+	}
+
+	envArray := strings.Split(string(contents[:]), "\n")
+	return envArray
+}
+
+func DockerStartContainer(cont Container, ctx context.Context, cli *client.Client, env []string) {
 	fmt.Println("Starting Docker Container")
+	fmt.Printf("%+v\n", cont)
+
+	resp, err := cli.ContainerCreate(ctx, &container.Config{
+		Image:      cont.DockerImage,
+		Entrypoint: []string{cont.Entrypoint},
+	}, nil, nil, nil, cont.Name)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+		panic(err)
+	}
+
 }
