@@ -8,4 +8,4 @@ update-submodules:
 
 build-profile-launcher:
 	@mkdir -p ./results || true
-	@cd ./configs/opencv-ovms/profile-launcher && $(MAKE) build
+	@cd ./profile-launcher && $(MAKE) build

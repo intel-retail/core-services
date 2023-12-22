@@ -166,8 +166,6 @@ func main() {
 		log.Fatalf("failed to unmarshal configuration file configuration.yaml: %v", err)
 	}
 
-	log.Println("data: ", data)
-
 	// convert to struct
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
