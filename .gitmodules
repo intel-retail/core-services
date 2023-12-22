@@ -1,6 +1,0 @@
-[submodule "retail-use-cases"]
-	path = retail-use-cases
-	url = https://github.com/intel-retail/retail-use-cases
-[submodule "performance-tools"]
-	path = performance-tools
-	url = https://github.com/intel-retail/performance-tools

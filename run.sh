@@ -100,6 +100,14 @@ then
                 error 'ERROR: "--inputsrc" requires an argument RS_SERIAL_NUMBER|CAMERA_RTSP_URL|file:video.mp4|/dev/video0.'
             fi
             ;;
+        --profiledir)
+            if [ "$2" ]; then
+                PROFILEDIR=$2
+                shift
+            else
+                error 'ERROR: "--profiledir" requires an argument.'
+            fi
+            ;;
         -?*)
             error "ERROR: Unknown option $1"
             ;;
@@ -193,12 +201,6 @@ then
 	fi
 fi
 
-# make sure models are downloaded or existing:
-./download_models/getModels.sh
-
-# make sure sample image is downloaded or existing:
-./configs/opencv-ovms/scripts/image_download.sh
-
 # devices supported CPU, GPU, GPU.x, AUTO, MULTI:GPU,CPU
 DEVICE="${DEVICE:="CPU"}"
 
@@ -232,4 +234,4 @@ COMPLETE_INIT_DURATION=$COMPLETE_INIT_DURATION \
 CPU_ONLY="$CPU_ONLY" \
 PIPELINE_PROFILE="$PIPELINE_PROFILE" \
 AUTO_SCALE_FLEX_140="$AUTO_SCALE_FLEX_140" \
-./profile-launcher -configDir "$(dirname "$(readlink ./profile-launcher)")" > ./results/profile-launcher."$current_time".log 2>&1 &
+./profile-launcher -configDir "$PROFILEDIR" > ./results/profile-launcher."$current_time".log 2>&1 &
