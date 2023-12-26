@@ -28,9 +28,13 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v3"
 )
+
+// A TEST RUN STRING
+// go run main.go -e TEST_ENV=aaa,NEW=abc
 
 type Containers struct {
 	Containers []Container `yaml:"Containers"`
@@ -67,11 +71,14 @@ func main() {
 	fmt.Println(envOverrides)
 
 	containersArray := GetYamlConfig(configDir)
-	envArray := GetEnv(configDir)
-	// for _, env := range envArray {
-	// 	fmt.Println("env:")
-	// 	fmt.Println(env)
-	// }
+	envMap := GetEnv(configDir)
+
+	envArray := OverrideEnv(envMap, envOverrides)
+	for _, env := range envMap {
+		fmt.Println("env:")
+		fmt.Println(env)
+	}
+	fmt.Println(envArray)
 
 	// Setup Docker CLI
 	ctx := context.Background()
@@ -104,7 +111,7 @@ func GetYamlConfig(configDir string) Containers {
 	return containersArray
 }
 
-func GetEnv(configDir string) []string {
+func GetEnv(configDir string) map[string]string {
 	profileConfigPath := filepath.Join(configDir, "profile.env")
 	contents, err := os.ReadFile(profileConfigPath)
 	if err != nil {
@@ -112,7 +119,30 @@ func GetEnv(configDir string) []string {
 			configDir, err)
 	}
 
-	envArray := strings.Split(string(contents[:]), "\n")
+	splitEnv := strings.Split(string(contents[:]), "\n")
+	envArray := make(map[string]string)
+	for _, env := range splitEnv {
+		envs := strings.Split(string(env[:]), "=")
+		envArray[envs[0]] = envs[1]
+	}
+	return envArray
+}
+
+func OverrideEnv(envMap map[string]string, envOverrides string) []string {
+	if envOverrides == "" {
+		return []string{}
+	}
+
+	splitEnvOverride := strings.Split(string(envOverrides[:]), ",")
+	for _, env := range splitEnvOverride {
+		envs := strings.Split(string(env[:]), "=")
+		envMap[envs[0]] = envs[1]
+	}
+
+	var envArray []string
+	for key, value := range envMap {
+		envArray = append(envArray, key+"="+value)
+	}
 	return envArray
 }
 
@@ -122,8 +152,19 @@ func DockerStartContainer(cont Container, ctx context.Context, cli *client.Clien
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      cont.DockerImage,
+		Env:        env,
 		Entrypoint: []string{cont.Entrypoint},
-	}, nil, nil, nil, cont.Name)
+	},
+		&container.HostConfig{
+			Mounts: []mount.Mount{
+				{
+					Type:   mount.TypeBind,
+					Source: "/home/intel/projects/intel-retail/core-services/profile-launcher/test-profile",
+					Target: "/test-profile",
+				},
+			},
+		},
+		nil, nil, cont.Name)
 	if err != nil {
 		panic(err)
 	}
