@@ -77,34 +77,33 @@ type envOverrideFlags []string
 func main() {
 	var configDir string
 	flag.StringVar(&configDir, "configdir", "./test-profile", "Directory with the profile config")
-	flag.StringVar(&volumes, "v", "Volume mount for the container")
+	flag.Var(&volumes, "v", "Volume mount for the container")
 	flag.Var(&envOverrides, "e", "Environment overridees for the container")
 	flag.Parse()
-	fmt.Println(volumes)
-	fmt.Println(envOverrides)
 
 	containersArray := GetYamlConfig(configDir)
-	envMap := GetEnv(configDir)
-
-	envArray := OverrideEnv(envMap, envOverrides)
-	for _, env := range envMap {
-		fmt.Println("env:")
-		fmt.Println(env)
-	}
+	envArray := GetEnv(configDir)
+	fmt.Println(containersArray)
 	fmt.Println(envArray)
 
-	// Setup Docker CLI
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		panic(err)
+	if len(envOverrides) > 0 {
+		fmt.Println("Override Env")
+		envArray = OverrideEnv(envArray, envOverrides)
+		fmt.Println(envArray)
 	}
-	defer cli.Close()
 
-	// Run each container found in config
-	for _, cont := range containersArray.Containers {
-		DockerStartContainer(cont, ctx, cli, envArray)
-	}
+	// // Setup Docker CLI
+	// ctx := context.Background()
+	// cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer cli.Close()
+
+	// // Run each container found in config
+	// for _, cont := range containersArray.Containers {
+	// 	DockerStartContainer(cont, ctx, cli, envArray)
+	// }
 }
 
 func GetYamlConfig(configDir string) Containers {
@@ -124,7 +123,7 @@ func GetYamlConfig(configDir string) Containers {
 	return containersArray
 }
 
-func GetEnv(configDir string) map[string]string {
+func GetEnv(configDir string) []string {
 	profileConfigPath := filepath.Join(configDir, "profile.env")
 	contents, err := os.ReadFile(profileConfigPath)
 	if err != nil {
@@ -132,31 +131,27 @@ func GetEnv(configDir string) map[string]string {
 			configDir, err)
 	}
 
-	splitEnv := strings.Split(string(contents[:]), "\n")
-	envArray := make(map[string]string)
-	for _, env := range splitEnv {
-		envs := strings.Split(string(env[:]), "=")
-		envArray[envs[0]] = envs[1]
-	}
-	return envArray
+	return strings.Split(string(contents[:]), "\n")
 }
 
-func OverrideEnv(envMap map[string]string, envOverrides string) []string {
-	if envOverrides == "" {
-		return []string{}
+func OverrideEnv(envArray []string, envOverrides []string) []string {
+	tmpEnvArray := envArray
+	for _, override := range envOverrides {
+		notFound := true
+		overrideArray := strings.Split(override, "=")
+		if override != "" && len(overrideArray) == 2 {
+			for i, env := range envArray {
+				if strings.Contains(env, overrideArray[0]+"=") {
+					tmpEnvArray[i] = override
+					notFound = false
+				}
+			}
+			if notFound {
+				tmpEnvArray = append(tmpEnvArray, override)
+			}
+		}
 	}
-
-	splitEnvOverride := strings.Split(string(envOverrides[:]), ",")
-	for _, env := range splitEnvOverride {
-		envs := strings.Split(string(env[:]), "=")
-		envMap[envs[0]] = envs[1]
-	}
-
-	var envArray []string
-	for key, value := range envMap {
-		envArray = append(envArray, key+"="+value)
-	}
-	return envArray
+	return tmpEnvArray
 }
 
 func DockerStartContainer(cont Container, ctx context.Context, cli *client.Client, env []string) {
