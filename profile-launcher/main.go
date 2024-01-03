@@ -44,7 +44,9 @@ type Container struct {
 	Name                     string   `yaml:"Name"`
 	DockerImage              string   `yaml:"DockerImage"`
 	EnvironmentVariableFiles string   `yaml:"EnvironmentVariableFiles"`
+	Envs                     []string `yaml:"Envs"`
 	Volumes                  []string `yaml:"Volumes"`
+	InputSrc                 string   `yaml:"InputSrc"`
 	Entrypoint               string   `yaml:"Entrypoint"`
 }
 
@@ -64,32 +66,40 @@ var envOverrides arrayFlags
 var volumes arrayFlags
 
 // docker run --network host --user root --ipc=host \
-// --name "$containerNameInstance" \
-// --env-file "$DOT_ENV_FILE" \
-// -e CONTAINER_NAME="$containerNameInstance" \
 // $TARGET_USB_DEVICE \
 // $TARGET_GPU_DEVICE \
-// $volFullExpand \
-// "$DOCKER_IMAGE" \
-// bash -c '$DOCKER_CMD'
+
 type envOverrideFlags []string
 
 func main() {
 	var configDir string
+	var targetDevice string
+	var inputSrc string
 	flag.StringVar(&configDir, "configdir", "./test-profile", "Directory with the profile config")
+	flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
+	flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
 	flag.Var(&volumes, "v", "Volume mount for the container")
 	flag.Var(&envOverrides, "e", "Environment overridees for the container")
 	flag.Parse()
 
 	containersArray := GetYamlConfig(configDir)
-	envArray := GetEnv(configDir)
-	fmt.Println(containersArray)
-	fmt.Println(envArray)
+	if err := containersArray.GetEnv(configDir); err != nil {
+		os.Exit(-1)
+	}
 
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
-		envArray = OverrideEnv(envArray, envOverrides)
-		fmt.Println(envArray)
+		if err := containersArray.OverrideEnv(envOverrides); err != nil {
+			os.Exit(-1)
+		}
+	}
+
+	// Set the target device ENV
+	containersArray.SetTargetDevice()
+
+	if inputSrc == "" {
+		fmt.Errorf("InputSrc was not set. Exiting profile launcher.")
+		os.Exit(-1)
 	}
 
 	// // Setup Docker CLI
@@ -101,9 +111,7 @@ func main() {
 	// defer cli.Close()
 
 	// // Run each container found in config
-	// for _, cont := range containersArray.Containers {
 	// 	DockerStartContainer(cont, ctx, cli, envArray)
-	// }
 }
 
 func GetYamlConfig(configDir string) Containers {
@@ -123,62 +131,71 @@ func GetYamlConfig(configDir string) Containers {
 	return containersArray
 }
 
-func GetEnv(configDir string) []string {
-	profileConfigPath := filepath.Join(configDir, "profile.env")
-	contents, err := os.ReadFile(profileConfigPath)
-	if err != nil {
-		err = fmt.Errorf("Unable to read config file: %v, error: %v",
-			configDir, err)
+func (containerArray *Containers) GetEnv(configDir string) error {
+	for i, cont := range containerArray.Containers {
+		profileConfigPath := filepath.Join(configDir, cont.EnvironmentVariableFiles)
+		contents, err := os.ReadFile(profileConfigPath)
+		if err != nil {
+			err = fmt.Errorf("Unable to read config file: %v, error: %v",
+				configDir, err)
+			return err
+		}
+		containerArray.Containers[i].Envs = strings.Split(string(contents[:]), "\n")
 	}
-
-	return strings.Split(string(contents[:]), "\n")
+	return nil
 }
 
-func OverrideEnv(envArray []string, envOverrides []string) []string {
-	tmpEnvArray := envArray
-	for _, override := range envOverrides {
-		notFound := true
-		overrideArray := strings.Split(override, "=")
-		if override != "" && len(overrideArray) == 2 {
-			for i, env := range envArray {
-				if strings.Contains(env, overrideArray[0]+"=") {
-					tmpEnvArray[i] = override
-					notFound = false
+func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
+	for contIndex, cont := range containerArray.Containers {
+		for _, override := range envOverrides {
+			notFound := true
+			overrideArray := strings.Split(override, "=")
+			if override != "" && len(overrideArray) == 2 {
+				for envIndex, env := range cont.Envs {
+					if strings.Contains(env, overrideArray[0]+"=") {
+						containerArray.Containers[contIndex].Envs[envIndex] = override
+						notFound = false
+					}
 				}
-			}
-			if notFound {
-				tmpEnvArray = append(tmpEnvArray, override)
+				if notFound {
+					containerArray.Containers[contIndex].Envs = append(containerArray.Containers[contIndex].Envs, override)
+				}
 			}
 		}
 	}
-	return tmpEnvArray
+	return nil
 }
 
-func DockerStartContainer(cont Container, ctx context.Context, cli *client.Client, env []string) {
-	fmt.Println("Starting Docker Container")
-	fmt.Printf("%+v\n", cont)
+func (con *Containers) SetTargetDevice() {
 
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:      cont.DockerImage,
-		Env:        env,
-		Entrypoint: []string{cont.Entrypoint},
-	},
-		&container.HostConfig{
-			Mounts: []mount.Mount{
-				{
-					Type:   mount.TypeBind,
-					Source: "/home/intel/projects/intel-retail/core-services/profile-launcher/test-profile",
-					Target: "/test-profile",
+}
+
+func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
+	for _, cont := range containerArray.Containers {
+		fmt.Println("Starting Docker Container")
+		fmt.Printf("%+v\n", cont)
+
+		resp, err := cli.ContainerCreate(ctx, &container.Config{
+			Image:      cont.DockerImage,
+			Env:        cont.Envs,
+			Entrypoint: []string{cont.Entrypoint},
+		},
+			&container.HostConfig{
+				Mounts: []mount.Mount{
+					{
+						Type:   mount.TypeBind,
+						Source: "/home/intel/projects/intel-retail/core-services/profile-launcher/test-profile",
+						Target: "/test-profile",
+					},
 				},
 			},
-		},
-		nil, nil, cont.Name)
-	if err != nil {
-		panic(err)
-	}
+			nil, nil, cont.Name)
+		if err != nil {
+			panic(err)
+		}
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		panic(err)
+		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+			panic(err)
+		}
 	}
-
 }
