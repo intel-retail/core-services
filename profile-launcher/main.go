@@ -19,35 +19,38 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v3"
 )
 
 // A TEST RUN STRING
-// go run main.go -e TEST_ENV=aaa,NEW=abc
+// go run main.go -e TEST_ENV=aaa,NEW=abc --configdir /use-cases/dlstreamer/res --inputsrc /dev/video4 --target_device CPU
 
 type Containers struct {
-	Containers []Container `yaml:"Containers"`
+	Containers   []Container `yaml:"Containers"`
+	InputSrc     string      `yaml:"InputSrc"`
+	TargetDevice string      `yaml:"TargetDevice"`
 }
 
 type Container struct {
-	Name                     string   `yaml:"Name"`
-	DockerImage              string   `yaml:"DockerImage"`
-	EnvironmentVariableFiles string   `yaml:"EnvironmentVariableFiles"`
-	Envs                     []string `yaml:"Envs"`
-	Volumes                  []string `yaml:"Volumes"`
-	InputSrc                 string   `yaml:"InputSrc"`
-	Entrypoint               string   `yaml:"Entrypoint"`
+	Name                     string               `yaml:"Name"`
+	DockerImage              string               `yaml:"DockerImage"`
+	EnvironmentVariableFiles string               `yaml:"EnvironmentVariableFiles"`
+	Envs                     []string             `yaml:"Envs"`
+	Volumes                  []string             `yaml:"Volumes"`
+	Entrypoint               string               `yaml:"Entrypoint"`
+	HostConfig               container.HostConfig `yaml:"HostConfig"`
 }
 
 // Array flag when variables can be used multiple times
@@ -95,23 +98,30 @@ func main() {
 	}
 
 	// Set the target device ENV
+	containersArray.TargetDevice = targetDevice
 	containersArray.SetTargetDevice()
+	// Set the input source
+	containersArray.InputSrc = inputSrc
+	containersArray.SetInputSrc()
 
 	if inputSrc == "" {
 		fmt.Errorf("InputSrc was not set. Exiting profile launcher.")
 		os.Exit(-1)
 	}
 
-	// // Setup Docker CLI
-	// ctx := context.Background()
-	// cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer cli.Close()
+	containersArray2, _ := json.Marshal(containersArray)
+	fmt.Println(string(containersArray2))
 
-	// // Run each container found in config
-	// 	DockerStartContainer(cont, ctx, cli, envArray)
+	// Setup Docker CLI
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+	defer cli.Close()
+
+	// Run each container found in config
+	containersArray.DockerStartContainer(ctx, cli)
 }
 
 func GetYamlConfig(configDir string) Containers {
@@ -141,6 +151,10 @@ func (containerArray *Containers) GetEnv(configDir string) error {
 			return err
 		}
 		containerArray.Containers[i].Envs = strings.Split(string(contents[:]), "\n")
+		// Set Target Device ENV
+		if containerArray.TargetDevice != "" {
+			containerArray.Containers[i].Envs = append(containerArray.Containers[i].Envs, containerArray.TargetDevice)
+		}
 	}
 	return nil
 }
@@ -166,10 +180,63 @@ func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
 	return nil
 }
 
-func (con *Containers) SetTargetDevice() {
-
+// Setup device mounts and ENV based on the targe device input
+func (containerArray *Containers) SetTargetDevice() error {
+	if containerArray.TargetDevice == "" {
+		containerArray.SetPrivileged()
+	} else if containerArray.TargetDevice == "CPU" {
+		// CPU do nothing
+		return nil
+	} else if containerArray.TargetDevice == "GPU" ||
+		strings.Contains(containerArray.TargetDevice, "MULTI") ||
+		containerArray.TargetDevice == "AUTO" {
+		// GPU set to privileged so we can access all GPU
+		containerArray.SetPrivileged()
+	} else if strings.Contains(containerArray.TargetDevice, "GPU.") {
+		// GPU.X set access to a specific GPU device and set the correct ENV
+		TargetDeviceArray := strings.Split(containerArray.TargetDevice, ".")
+		DeviceNum, errNum := strconv.Atoi(TargetDeviceArray[1])
+		if errNum != nil {
+			return errNum
+		}
+		TargetDeviceNum := 128 + DeviceNum
+		TargetGpu := "GPU." + strconv.Itoa(TargetDeviceNum)
+		// Set GPU Device
+		containerArray.SetHostDevice("/dev/dri/renderD\"" + TargetGpu)
+	} else {
+		return fmt.Errorf("Target device not supported")
+	}
+	return nil
 }
 
+// Set the container to privileged mode
+func (containerArray *Containers) SetPrivileged() {
+	for contIndex, _ := range containerArray.Containers {
+		containerArray.Containers[contIndex].HostConfig.Privileged = true
+	}
+}
+
+// Setup the device mount
+func (containerArray *Containers) SetHostDevice(device string) {
+	deviceMount := container.DeviceMapping{
+		PathOnHost:        device,
+		PathInContainer:   device,
+		CgroupPermissions: "rwm",
+	}
+
+	for contIndex, _ := range containerArray.Containers {
+		containerArray.Containers[contIndex].HostConfig.Devices = append(containerArray.Containers[contIndex].HostConfig.Devices, deviceMount)
+	}
+}
+
+// Setup devices and other mounts based on the inputsrc
+func (containerArray *Containers) SetInputSrc() {
+	if strings.Contains(containerArray.InputSrc, "/video") {
+		containerArray.SetHostDevice(containerArray.InputSrc)
+	}
+}
+
+// Create and start the Docker container
 func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
 	for _, cont := range containerArray.Containers {
 		fmt.Println("Starting Docker Container")
@@ -178,17 +245,9 @@ func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli 
 		resp, err := cli.ContainerCreate(ctx, &container.Config{
 			Image:      cont.DockerImage,
 			Env:        cont.Envs,
-			Entrypoint: []string{cont.Entrypoint},
+			Entrypoint: strings.Split(cont.Entrypoint, ","),
 		},
-			&container.HostConfig{
-				Mounts: []mount.Mount{
-					{
-						Type:   mount.TypeBind,
-						Source: "/home/intel/projects/intel-retail/core-services/profile-launcher/test-profile",
-						Target: "/test-profile",
-					},
-				},
-			},
+			&cont.HostConfig,
 			nil, nil, cont.Name)
 		if err != nil {
 			panic(err)

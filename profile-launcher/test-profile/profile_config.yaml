@@ -1,13 +1,13 @@
 Containers:
   - Name: OVMSClient
-    DockerImage: ubuntu:22.04
+    DockerImage: test:dev
     EnvironmentVariableFiles: profile.env
-    Entrypoint: /test-profile/entrypoint.sh
+    Entrypoint: /script/entrypoint.sh
     Volumes: 
       - /test-profile:/test-profile
   - Name: OVMSServer
-    DockerImage: ubuntu:22.04
+    DockerImage: test:dev
     EnvironmentVariableFiles: profile2.env
-    Entrypoint: /test-profile/entrypoint.sh
+    Entrypoint: /script/entrypoint2.sh
     Volumes: 
       - /test-profile:/test-profile
