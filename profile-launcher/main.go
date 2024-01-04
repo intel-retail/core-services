@@ -30,6 +30,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"gopkg.in/yaml.v3"
 )
@@ -69,8 +70,6 @@ var envOverrides arrayFlags
 var volumes arrayFlags
 
 // docker run --network host --user root --ipc=host \
-// $TARGET_USB_DEVICE \
-// $TARGET_GPU_DEVICE \
 
 type envOverrideFlags []string
 
@@ -85,16 +84,24 @@ func main() {
 	flag.Var(&envOverrides, "e", "Environment overridees for the container")
 	flag.Parse()
 
+	// Load yaml config
 	containersArray := GetYamlConfig(configDir)
+	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
 		os.Exit(-1)
 	}
 
+	// Set ENV overrides if any exist
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
 		if err := containersArray.OverrideEnv(envOverrides); err != nil {
 			os.Exit(-1)
 		}
+	}
+
+	// Set Volumes
+	if err := containersArray.SetVolumes(volumes); err != nil {
+		os.Exit(-1)
 	}
 
 	// Set the target device ENV
@@ -178,6 +185,45 @@ func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
 		}
 	}
 	return nil
+}
+
+func (containerArray *Containers) SetVolumes(volumes []string) error {
+	var volumeMountParam []mount.Mount
+	for _, vol := range volumes {
+		tmpVol, err := CreateVolumeMount(vol)
+		if err != nil {
+			return fmt.Errorf("Failed to create volume mount")
+		}
+		volumeMountParam = append(volumeMountParam, tmpVol)
+	}
+
+	for contIndex, cont := range containerArray.Containers {
+		for _, vol := range cont.Volumes {
+			tmpVol, err := CreateVolumeMount(vol)
+			if err != nil {
+				return fmt.Errorf("Failed to create volume mount")
+			}
+			containerArray.Containers[contIndex].HostConfig.Mounts = append(containerArray.Containers[contIndex].HostConfig.Mounts, tmpVol)
+		}
+		containerArray.Containers[contIndex].HostConfig.Mounts = append(containerArray.Containers[contIndex].HostConfig.Mounts, volumeMountParam...)
+	}
+
+	return nil
+}
+
+func CreateVolumeMount(vol string) (mount.Mount, error) {
+	volSplit := strings.Split(vol, ":")
+	sourcePath, err := filepath.Abs(volSplit[0])
+	if err != nil {
+		return mount.Mount{}, fmt.Errorf("Failed to get volume path", err)
+	}
+
+	return mount.Mount{
+		Type:     mount.TypeBind,
+		Source:   sourcePath,
+		Target:   volSplit[1],
+		ReadOnly: false,
+	}, nil
 }
 
 // Setup device mounts and ENV based on the targe device input
