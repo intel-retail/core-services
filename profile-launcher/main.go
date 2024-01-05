@@ -305,7 +305,7 @@ func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli 
 		resp, err := cli.ContainerCreate(ctx, &container.Config{
 			Image:      cont.DockerImage,
 			Env:        cont.Envs,
-			Entrypoint: strings.Split(cont.Entrypoint, ","),
+			Entrypoint: strings.Split(cont.Entrypoint, " "),
 		},
 			&cont.HostConfig,
 			nil, nil, cont.Name)
