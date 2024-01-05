@@ -69,8 +69,6 @@ func (i *arrayFlags) Set(value string) error {
 var envOverrides arrayFlags
 var volumes arrayFlags
 
-// docker run --network host --user root --ipc=host \
-
 type envOverrideFlags []string
 
 func main() {
@@ -88,19 +86,23 @@ func main() {
 	containersArray := GetYamlConfig(configDir)
 	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
+		fmt.Errorf("Failed to load ENV file", err)
 		os.Exit(-1)
 	}
+	containersArray.SetHostNetwork()
 
 	// Set ENV overrides if any exist
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
 		if err := containersArray.OverrideEnv(envOverrides); err != nil {
+			fmt.Errorf("Failed to over ride input ENV values", err)
 			os.Exit(-1)
 		}
 	}
 
 	// Set Volumes
 	if err := containersArray.SetVolumes(volumes); err != nil {
+		fmt.Errorf("Failed to load Volumes from config file", err)
 		os.Exit(-1)
 	}
 
@@ -262,6 +264,14 @@ func (containerArray *Containers) SetPrivileged() {
 	}
 }
 
+// Set container to use host network
+func (containerArray *Containers) SetHostNetwork() {
+	for contIndex, _ := range containerArray.Containers {
+		containerArray.Containers[contIndex].HostConfig.NetworkMode = "host"
+		containerArray.Containers[contIndex].HostConfig.IpcMode = "host"
+	}
+}
+
 // Setup the device mount
 func (containerArray *Containers) SetHostDevice(device string) {
 	deviceMount := container.DeviceMapping{
@@ -279,6 +289,10 @@ func (containerArray *Containers) SetHostDevice(device string) {
 func (containerArray *Containers) SetInputSrc() {
 	if strings.Contains(containerArray.InputSrc, "/video") {
 		containerArray.SetHostDevice(containerArray.InputSrc)
+	}
+
+	for contIndex, _ := range containerArray.Containers {
+		containerArray.Containers[contIndex].Envs = append(containerArray.Containers[contIndex].Envs, "INPUTSRC="+containerArray.InputSrc)
 	}
 }
 
