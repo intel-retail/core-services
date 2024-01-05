@@ -50,6 +50,7 @@ func TestGetYamlConfig(t *testing.T) {
 		expectedContainers Containers
 	}{
 		{"valid profile config with 2 containers", "./test-profile", TestContainers},
+		{"invalid profile config", "./invalid", Containers{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,8 +60,69 @@ func TestGetYamlConfig(t *testing.T) {
 	}
 }
 
-// func (containerArray *Containers) GetEnv(configDir string) error {
-// func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
+// GetEnv: test loading env file
+func TestGetEnv(t *testing.T) {
+	tests := []struct {
+		name               string
+		configDir          string
+		expectedErr        bool
+		expectedContainers Containers
+		setTargetDevice    bool
+	}{
+		{"valid profile config with 2 containers", "./test-profile", false, TestContainers, false},
+		{"invalid profile config", "./invalid", true, TestContainers, false},
+		{"valid profile config with target device set", "./test-profile", false, TestContainers, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set target device
+			if tt.setTargetDevice {
+				tt.expectedContainers.TargetDevice = "CPU"
+			}
+
+			hasError := false
+			err := tt.expectedContainers.GetEnv(tt.configDir)
+			if err != nil {
+				hasError = true
+			}
+
+			require.Equal(t, tt.expectedErr, hasError)
+		})
+	}
+}
+
+// OverrideEnv: test loading env file
+func TestOverrideEnv(t *testing.T) {
+	tests := []struct {
+		name               string
+		expectedErr        bool
+		expectedContainers Containers
+		overrideEnv        []string
+		expectedEnv        []string
+	}{
+		{"valid env overrides", false, TestContainers, []string{"TEST_ENV=test"}, []string{"TEST_ENV=test"}},
+		{"valid new env", false, TestContainers, []string{"NEW_ENV=test"}, []string{"TEST_ENV=123", "NEW_ENV=test"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for contIndex, _ := range tt.expectedContainers.Containers {
+				tt.expectedContainers.Containers[contIndex].Envs = []string{"TEST_ENV=123"}
+			}
+
+			hasError := false
+			err := tt.expectedContainers.OverrideEnv(tt.overrideEnv)
+			if err != nil {
+				hasError = true
+			}
+
+			for _, cont := range tt.expectedContainers.Containers {
+				require.Equal(t, cont.Envs, tt.expectedEnv)
+			}
+			require.Equal(t, tt.expectedErr, hasError)
+		})
+	}
+}
+
 // func (containerArray *Containers) SetVolumes(volumes []string) error {
 // func CreateVolumeMount(vol string) (mount.Mount, error) {
 // func (containerArray *Containers) SetTargetDevice() error {
