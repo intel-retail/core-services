@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------------
-// Copyright 2023 Intel Corp.
+// Copyright 2024 Intel Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ func main() {
 	containersArray := GetYamlConfig(configDir)
 	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
-		fmt.Errorf("Failed to load ENV file", err)
+		fmt.Errorf("Failed to load ENV file %v", err)
 		os.Exit(-1)
 	}
 	containersArray.SetHostNetwork()
@@ -95,14 +95,14 @@ func main() {
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
 		if err := containersArray.OverrideEnv(envOverrides); err != nil {
-			fmt.Errorf("Failed to over ride input ENV values", err)
+			fmt.Errorf("Failed to over ride input ENV values %v", err)
 			os.Exit(-1)
 		}
 	}
 
 	// Set Volumes
 	if err := containersArray.SetVolumes(volumes); err != nil {
-		fmt.Errorf("Failed to load Volumes from config file", err)
+		fmt.Errorf("Failed to load Volumes from config file %v", err)
 		os.Exit(-1)
 	}
 
@@ -217,7 +217,7 @@ func CreateVolumeMount(vol string) (mount.Mount, error) {
 	volSplit := strings.Split(vol, ":")
 	sourcePath, err := filepath.Abs(volSplit[0])
 	if err != nil {
-		return mount.Mount{}, fmt.Errorf("Failed to get volume path", err)
+		return mount.Mount{}, fmt.Errorf("Failed to get volume path %v", err)
 	}
 
 	return mount.Mount{
