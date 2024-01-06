@@ -30,7 +30,7 @@ import (
 )
 
 // Create and start the Docker container
-func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
+func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) error {
 	for _, cont := range containerArray.Containers {
 		fmt.Println("Starting Docker Container")
 		fmt.Printf("%+v\n", cont)
@@ -43,13 +43,14 @@ func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli 
 			&cont.HostConfig,
 			nil, nil, cont.Name)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // Set the container to privileged mode

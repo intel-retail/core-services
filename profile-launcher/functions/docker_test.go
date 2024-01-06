@@ -18,15 +18,95 @@
 package functions
 
 import (
+	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/require"
 )
 
-// func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
+// TestDockerStartContainer: test starting a container from the configuration yaml
+func TestDockerStartContainer(t *testing.T) {
+	// Setup Docker CLI
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		require.NoError(t, err)
+	}
+	defer cli.Close()
+
+	tests := []struct {
+		name               string
+		expectedErr        bool
+		expectedContainers Containers
+	}{
+		{"valid container launch", false, CreateTestContainers("", "")},
+		{"invalid container image", true, Containers{
+			InputSrc:     "",
+			TargetDevice: "",
+			Containers: []Container{{
+				Name:                     "OVMSClient",
+				DockerImage:              "",
+				Entrypoint:               "/script/entrypoint.sh",
+				EnvironmentVariableFiles: "profile.env",
+				Volumes:                  []string{"./test-profile:/test-profile"},
+			}}}},
+		{"invalid duplicate container names", true, Containers{
+			InputSrc:     "",
+			TargetDevice: "",
+			Containers: []Container{{
+				Name:                     "OVMSClient",
+				DockerImage:              "test:dev",
+				Entrypoint:               "/script/entrypoint.sh",
+				EnvironmentVariableFiles: "profile.env",
+				Volumes:                  []string{"./test-profile:/test-profile"},
+			},
+				{
+					Name:                     "OVMSClient",
+					DockerImage:              "test:dev",
+					Entrypoint:               "/script/entrypoint.sh",
+					EnvironmentVariableFiles: "profile.env",
+					Volumes:                  []string{"./test-profile:/test-profile"},
+				},
+			}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hasError := false
+			err := tt.expectedContainers.DockerStartContainer(ctx, cli)
+			if err != nil {
+				hasError = true
+			}
+
+			require.Equal(t, tt.expectedErr, hasError)
+
+			containerList, err := cli.ContainerList(ctx, types.ContainerListOptions{All: true})
+			if err != nil {
+				require.NoError(t, err)
+			}
+
+			for _, cont := range tt.expectedContainers.Containers {
+				found := false
+				for _, container := range containerList {
+					if strings.Contains(container.Names[0], cont.Name) {
+						found = true
+						break
+					}
+				}
+				require.True(t, found)
+			}
+			// cleanup
+			for _, stopCont := range containerList {
+				cli.ContainerRemove(ctx, stopCont.ID, types.ContainerRemoveOptions{})
+			}
+		})
+	}
+}
 
 // TestSetHostNetwork: test loading the config yaml file
 func TestSetHostNetwork(t *testing.T) {
