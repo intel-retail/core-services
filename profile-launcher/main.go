@@ -19,10 +19,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 
 	"github.com/docker/docker/client"
 	"github.com/intel-retail/core-services/profile-launcher/functions"
@@ -40,12 +38,11 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
-var envOverrides arrayFlags
-var volumes arrayFlags
-
 type envOverrideFlags []string
 
 func main() {
+	var envOverrides arrayFlags
+	var volumes arrayFlags
 	var configDir string
 	var targetDevice string
 	var inputSrc string
@@ -56,12 +53,22 @@ func main() {
 	flag.Var(&envOverrides, "e", "Environment overridees for the container")
 	flag.Parse()
 
+	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides)
+	if err != nil {
+		fmt.Errorf("Failed to run contaienrs %v", err)
+	}
+
+	if runErr := RunContainers(containersArray); err != nil {
+		fmt.Errorf("Failed to run contaienrs %v", runErr)
+	}
+}
+
+func InitContainers(configDir string, targetDevice string, inputSrc string, volumes []string, envOverrides []string) (functions.Containers, error) {
 	// Load yaml config
 	containersArray := functions.GetYamlConfig(configDir)
 	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
-		fmt.Errorf("Failed to load ENV file %v", err)
-		os.Exit(-1)
+		return functions.Containers{}, fmt.Errorf("Failed to load ENV file %v", err)
 	}
 	containersArray.SetHostNetwork()
 
@@ -69,39 +76,40 @@ func main() {
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
 		if err := containersArray.OverrideEnv(envOverrides); err != nil {
-			fmt.Errorf("Failed to over ride input ENV values %v", err)
-			os.Exit(-1)
+			return functions.Containers{}, err
 		}
 	}
 
 	// Set Volumes
 	if err := containersArray.SetVolumes(volumes); err != nil {
-		fmt.Errorf("Failed to load Volumes from config file %v", err)
-		os.Exit(-1)
+		return functions.Containers{}, err
 	}
 
 	// Set the target device ENV
 	containersArray.TargetDevice = targetDevice
-	containersArray.SetTargetDevice()
-	// Set the input source
-	containersArray.InputSrc = inputSrc
-	err := containersArray.SetInputSrc()
-	if err != nil {
-		fmt.Errorf("%v", err)
-		os.Exit(-1)
+	if err := containersArray.SetTargetDevice(); err != nil {
+		return functions.Containers{}, err
 	}
 
-	containersArray2, _ := json.Marshal(containersArray)
-	fmt.Println(string(containersArray2))
+	// Set the input source
+	containersArray.InputSrc = inputSrc
+	if err := containersArray.SetInputSrc(); err != nil {
+		return functions.Containers{}, err
+	}
 
+	return containersArray, nil
+}
+
+func RunContainers(containersArray functions.Containers) error {
 	// Setup Docker CLI
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer cli.Close()
 
 	// Run each container found in config
 	containersArray.DockerStartContainer(ctx, cli)
+	return nil
 }

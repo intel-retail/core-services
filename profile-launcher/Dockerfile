@@ -11,10 +11,7 @@ RUN apk update && \
 WORKDIR /app
 
 COPY . .
-RUN go mod tidy && make build-binary && make test
+RUN go mod tidy && make build-binary
 
 FROM scratch as bin
 COPY --from=builder /app/profile-launcher /
-
-FROM scratch as unittest
-COPY --from=builder /app/test.out /

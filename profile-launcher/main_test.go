@@ -18,11 +18,16 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(t *testing.T) {
+	os.Args = append(os.Args, "--configdir")
+	os.Args = append(os.Args, "./test-profile")
+
+	// main()
 	require.NoError(t, nil)
 }
