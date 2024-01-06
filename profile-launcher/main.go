@@ -20,6 +20,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -111,10 +112,9 @@ func main() {
 	containersArray.SetTargetDevice()
 	// Set the input source
 	containersArray.InputSrc = inputSrc
-	containersArray.SetInputSrc()
-
-	if inputSrc == "" {
-		fmt.Errorf("InputSrc was not set. Exiting profile launcher.")
+	err := containersArray.SetInputSrc()
+	if err != nil {
+		fmt.Errorf("%v", err)
 		os.Exit(-1)
 	}
 
@@ -248,9 +248,9 @@ func (containerArray *Containers) SetTargetDevice() error {
 			return errNum
 		}
 		TargetDeviceNum := 128 + DeviceNum
-		TargetGpu := "GPU." + strconv.Itoa(TargetDeviceNum)
+		TargetGpu := strconv.Itoa(TargetDeviceNum)
 		// Set GPU Device
-		containerArray.SetHostDevice("/dev/dri/renderD\"" + TargetGpu)
+		containerArray.SetHostDevice("/dev/dri/renderD" + TargetGpu)
 	} else {
 		return fmt.Errorf("Target device not supported")
 	}
@@ -286,14 +286,18 @@ func (containerArray *Containers) SetHostDevice(device string) {
 }
 
 // Setup devices and other mounts based on the inputsrc
-func (containerArray *Containers) SetInputSrc() {
-	if strings.Contains(containerArray.InputSrc, "/video") {
+func (containerArray *Containers) SetInputSrc() error {
+	if containerArray.InputSrc == "" {
+		return errors.New("InputSrc was not set. Exiting profile launcher.")
+	} else if strings.Contains(containerArray.InputSrc, "/video") {
 		containerArray.SetHostDevice(containerArray.InputSrc)
 	}
 
 	for contIndex, _ := range containerArray.Containers {
 		containerArray.Containers[contIndex].Envs = append(containerArray.Containers[contIndex].Envs, "INPUTSRC="+containerArray.InputSrc)
 	}
+
+	return nil
 }
 
 // Create and start the Docker container

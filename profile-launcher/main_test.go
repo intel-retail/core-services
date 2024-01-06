@@ -197,13 +197,14 @@ func TestSetTargetDevice(t *testing.T) {
 		expectedErr     bool
 		setTargetDevice string
 		isPrivileged    bool
-		setHostDevice   container.DeviceMapping
+		setHostDevice   []container.DeviceMapping
+		hasDevices      bool
 	}{
-		{"valid no target device", false, "", true, container.DeviceMapping{}},
-		{"valid CPU target device", false, "CPU", false, container.DeviceMapping{}},
-		{"valid GPU target device", false, "GPU", true, container.DeviceMapping{}},
-		{"valid GPU.0 target device", false, "GPU.0", false, container.DeviceMapping{PathOnHost: "/dev/dri/renderD128", PathInContainer: "/dev/dri/renderD128", CgroupPermissions: "rwm"}},
-		{"invalid target device", true, "invalid", false, container.DeviceMapping{}},
+		{"valid no target device", false, "", true, []container.DeviceMapping{}, false},
+		{"valid CPU target device", false, "CPU", false, []container.DeviceMapping{}, false},
+		{"valid GPU target device", false, "GPU", true, []container.DeviceMapping{}, false},
+		{"valid GPU.0 target device", false, "GPU.0", false, []container.DeviceMapping{{PathOnHost: "/dev/dri/renderD128", PathInContainer: "/dev/dri/renderD128", CgroupPermissions: "rwm"}}, true},
+		{"invalid target device", true, "invalid", false, []container.DeviceMapping{}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -216,6 +217,10 @@ func TestSetTargetDevice(t *testing.T) {
 			require.Equal(t, tt.expectedErr, hasError)
 			for _, cont := range tmpContainers.Containers {
 				require.Equal(t, cont.HostConfig.Privileged, tt.isPrivileged)
+				if tt.hasDevices {
+					require.Equal(t, cont.HostConfig.Devices, tt.setHostDevice)
+
+				}
 			}
 		})
 	}
@@ -229,7 +234,7 @@ func TestSetHostNetwork(t *testing.T) {
 		networkMode container.NetworkMode
 		ipcMode     container.IpcMode
 	}{
-		{"valid profile config with 2 containers", "./test-profile", container.NetworkMode("host"), container.IpcMode("host")},
+		{"valid set host network", "./test-profile", container.NetworkMode("host"), container.IpcMode("host")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -245,7 +250,38 @@ func TestSetHostNetwork(t *testing.T) {
 	}
 }
 
-// func (containerArray *Containers) SetInputSrc() {
+// TestSetInputSrc: test setting input src
+func TestSetInputSrc(t *testing.T) {
+	tests := []struct {
+		name          string
+		expectedErr   bool
+		setInputSrc   string
+		setHostDevice []container.DeviceMapping
+		hasDevices    bool
+	}{
+		{"valid no input src", true, "", []container.DeviceMapping{}, false},
+		{"valid USB input src", false, "/dev/video0", []container.DeviceMapping{{PathOnHost: "/dev/video0", PathInContainer: "/dev/video0", CgroupPermissions: "rwm"}}, true},
+		{"valid RTSP input src", false, "RTSP://127.0.0.1:8554/camera_0", []container.DeviceMapping{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpContainers := CreateTestContainers(tt.setInputSrc, "")
+			hasError := false
+			err := tmpContainers.SetInputSrc()
+			if err != nil {
+				hasError = true
+			}
+			require.Equal(t, tt.expectedErr, hasError)
+			for _, cont := range tmpContainers.Containers {
+				if tt.hasDevices {
+					require.Equal(t, cont.HostConfig.Devices, tt.setHostDevice)
+
+				}
+			}
+		})
+	}
+}
+
 // func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
 
 // func main
