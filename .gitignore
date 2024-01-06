@@ -4,3 +4,4 @@ docs/sitemap.xml.gz
 docs/*
 profile-launcher/profile-launcher
 smoke_tests_output.log
+profile-launcher/*.out

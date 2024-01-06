@@ -9,15 +9,12 @@ RUN apk update && \
     apk add make autoconf libtool protobuf-dev && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-# Compile API
-RUN wget https://raw.githubusercontent.com/openvinotoolkit/model_server/main/src/kfserving_api/grpc_predict_v2.proto
-RUN echo 'option go_package = "./grpc-client";' >> grpc_predict_v2.proto
-RUN protoc --go_out="./" --go-grpc_out="./" ./grpc_predict_v2.proto
 
 COPY . .
-RUN go mod tidy && make build-binary
+RUN go mod tidy && make build-binary && make test
 
 FROM scratch as bin
 COPY --from=builder /app/profile-launcher /
+
+FROM scratch as unittest
+COPY --from=builder /app/test.out /

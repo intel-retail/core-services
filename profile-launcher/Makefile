@@ -10,10 +10,12 @@ build-test:
 	cd test-profile && docker build -t test:dev .
 
 unit-test:
-	@docker build -f Dockerfile.unit-test -t go-unit-test:dev .
-	@docker run --rm -v .:/test -v /var/run/docker.sock:/var/run/docker.sock go-unit-test:dev
+	docker build --target unittest --output=. .
 
 build-binary:
 	@echo "building executeable profile-launcher..."
 	@go build -o profile-launcher
 	@echo "done"
+
+test:
+	go test -cover ./... >> test.out

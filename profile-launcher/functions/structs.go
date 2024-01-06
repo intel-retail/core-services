@@ -15,14 +15,22 @@
 //
 // ----------------------------------------------------------------------------------
 
-package main
+package functions
 
-import (
-	"testing"
+import "github.com/docker/docker/api/types/container"
 
-	"github.com/stretchr/testify/require"
-)
+type Containers struct {
+	Containers   []Container `yaml:"Containers"`
+	InputSrc     string      `yaml:"InputSrc"`
+	TargetDevice string      `yaml:"TargetDevice"`
+}
 
-func TestMain(t *testing.T) {
-	require.NoError(t, nil)
+type Container struct {
+	Name                     string               `yaml:"Name"`
+	DockerImage              string               `yaml:"DockerImage"`
+	EnvironmentVariableFiles string               `yaml:"EnvironmentVariableFiles"`
+	Envs                     []string             `yaml:"Envs"`
+	Volumes                  []string             `yaml:"Volumes"`
+	Entrypoint               string               `yaml:"Entrypoint"`
+	HostConfig               container.HostConfig `yaml:"HostConfig"`
 }
