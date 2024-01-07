@@ -20,7 +20,6 @@ package functions
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,21 +29,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func GetYamlConfig(configDir string) Containers {
+func GetYamlConfig(configDir string) (Containers, error) {
 	profileConfigPath := filepath.Join(configDir, "profile_config.yaml")
 	contents, err := os.ReadFile(profileConfigPath)
 	if err != nil {
-		err = fmt.Errorf("Unable to read config file: %v, error: %v",
+		return Containers{}, fmt.Errorf("Unable to read config file: %v, error: %v",
 			configDir, err)
 	}
 
 	containersArray := Containers{}
 	err = yaml.Unmarshal(contents, &containersArray)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return Containers{}, fmt.Errorf("error: %v", err)
 	}
 
-	return containersArray
+	return containersArray, nil
 }
 
 func (containerArray *Containers) GetEnv(configDir string) error {
@@ -69,8 +68,11 @@ func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
 	for contIndex, cont := range containerArray.Containers {
 		for _, override := range envOverrides {
 			notFound := true
-			overrideArray := strings.Split(override, "=")
-			if override != "" && len(overrideArray) == 2 {
+			if override != "" {
+				overrideArray := strings.Split(override, "=")
+				if len(overrideArray) != 2 {
+					return fmt.Errorf("env format incorrect, ensure env is EnvName=Value.")
+				}
 				for envIndex, env := range cont.Envs {
 					if strings.Contains(env, overrideArray[0]+"=") {
 						containerArray.Containers[contIndex].Envs[envIndex] = override

@@ -1,0 +1,7 @@
+Containers:
+  - Name: Client
+    DockerImage: ""
+    EnvironmentVariableFiles: profile.env
+    Entrypoint: /script/entrypoint.sh
+    Volumes: 
+      - ./test-profile/invalid-test-profile:/test-profile

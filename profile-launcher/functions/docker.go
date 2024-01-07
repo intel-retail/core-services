@@ -83,6 +83,10 @@ func (containerArray *Containers) SetHostDevice(device string) {
 
 func CreateVolumeMount(vol string) (mount.Mount, error) {
 	volSplit := strings.Split(vol, ":")
+	if len(volSplit) < 2 {
+		return mount.Mount{}, fmt.Errorf("Volume format incorrect, Ensure format is (target):(destination)")
+	}
+
 	sourcePath, err := filepath.Abs(volSplit[0])
 	if err != nil {
 		return mount.Mount{}, fmt.Errorf("Failed to get volume path %v", err)

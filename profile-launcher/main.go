@@ -56,16 +56,21 @@ func main() {
 	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides)
 	if err != nil {
 		fmt.Errorf("Failed to run contaienrs %v", err)
+
 	}
 
-	if runErr := RunContainers(containersArray); err != nil {
+	if runErr := RunContainers(containersArray); runErr != nil {
 		fmt.Errorf("Failed to run contaienrs %v", runErr)
 	}
+	return
 }
 
 func InitContainers(configDir string, targetDevice string, inputSrc string, volumes []string, envOverrides []string) (functions.Containers, error) {
 	// Load yaml config
-	containersArray := functions.GetYamlConfig(configDir)
+	containersArray, yamlErr := functions.GetYamlConfig(configDir)
+	if yamlErr != nil {
+		return functions.Containers{}, fmt.Errorf("Failed to load yaml config %v", yamlErr)
+	}
 	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
 		return functions.Containers{}, fmt.Errorf("Failed to load ENV file %v", err)
@@ -110,6 +115,8 @@ func RunContainers(containersArray functions.Containers) error {
 	defer cli.Close()
 
 	// Run each container found in config
-	containersArray.DockerStartContainer(ctx, cli)
+	if err := containersArray.DockerStartContainer(ctx, cli); err != nil {
+		return err
+	}
 	return nil
 }

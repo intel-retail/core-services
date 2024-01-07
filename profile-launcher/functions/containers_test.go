@@ -25,43 +25,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testConfigDir = "../test-profile"
-
-func CreateTestContainers(inputSrc string, targetDevice string) Containers {
-	return Containers{
-		InputSrc:     inputSrc,
-		TargetDevice: targetDevice,
-		Containers: []Container{{
-			Name:                     "OVMSClient",
-			DockerImage:              "test:dev",
-			Entrypoint:               "/script/entrypoint.sh",
-			EnvironmentVariableFiles: "profile.env",
-			Volumes:                  []string{"./test-profile:/test-profile"},
-		},
-			{
-				Name:                     "OVMSServer",
-				DockerImage:              "test:dev",
-				Entrypoint:               "/script/entrypoint2.sh",
-				EnvironmentVariableFiles: "profile2.env",
-				Volumes:                  []string{"./test-profile:/test-profile"},
-			}},
-	}
-}
-
 // TestGetYamlConfig: test loading the config yaml file
 func TestGetYamlConfig(t *testing.T) {
 	tests := []struct {
 		name               string
 		configDir          string
+		expectedErr        bool
 		expectedContainers Containers
 	}{
-		{"valid profile config with 2 containers", testConfigDir, CreateTestContainers("", "")},
-		{"invalid profile config", "./invalid", Containers{}},
+		{"valid profile config with 2 containers", testConfigDir, false, CreateTestContainers("", "")},
+		{"invalid profile config", "./invalid", true, Containers{}},
+		{"invalid profile format", testInvalidFormatDir, true, Containers{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			containersArray := GetYamlConfig(tt.configDir)
+			hasError := false
+			containersArray, err := GetYamlConfig(tt.configDir)
+			if err != nil {
+				hasError = true
+			}
+
 			require.Equal(t, tt.expectedContainers, containersArray)
+			require.Equal(t, tt.expectedErr, hasError)
 		})
 	}
 }
@@ -103,6 +88,8 @@ func TestOverrideEnv(t *testing.T) {
 	}{
 		{"valid env overrides", false, []string{"TEST_ENV=test"}, []string{"TEST_ENV=test"}},
 		{"valid new env", false, []string{"NEW_ENV=test"}, []string{"TEST_ENV=123", "NEW_ENV=test"}},
+		{"invalid env overrides", true, []string{"TEST_ENV"}, []string{}},
+		{"invalid new env", true, []string{"NEW_ENV"}, []string{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,8 +104,10 @@ func TestOverrideEnv(t *testing.T) {
 				hasError = true
 			}
 
-			for _, cont := range tmpContainers.Containers {
-				require.Equal(t, cont.Envs, tt.expectedEnv)
+			if tt.expectedErr != true {
+				for _, cont := range tmpContainers.Containers {
+					require.Equal(t, cont.Envs, tt.expectedEnv)
+				}
 			}
 			require.Equal(t, tt.expectedErr, hasError)
 		})
@@ -134,29 +123,29 @@ func TestSetVolumes(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name            string
-		expectedErr     bool
-		volume          []string
-		expectedVolumes []mount.Mount
+		name               string
+		expectedErr        bool
+		volume             []string
+		expectedVolumes    []mount.Mount
+		expectedContainers Containers
 	}{
-		{"valid with no input volumes", false, []string{}, []mount.Mount{volumeMount1}},
-		{"valid with input volumes", false, []string{"test:test"}, []mount.Mount{volumeMount1, volumeMount2}},
+		{"valid with no input volumes", false, []string{}, []mount.Mount{volumeMount1}, Containers{Containers: []Container{{Volumes: []string{"volume:volume"}}}}},
+		{"valid with input volumes", false, []string{"test:test"}, []mount.Mount{volumeMount1, volumeMount2}, Containers{Containers: []Container{{Volumes: []string{"volume:volume"}}}}},
+		{"invalid volume in config", true, []string{}, []mount.Mount{}, Containers{Containers: []Container{{Volumes: []string{"test"}}}}},
+		{"invalid volume param", true, []string{"test"}, []mount.Mount{}, CreateTestContainers("", "")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpContainers := CreateTestContainers("", "")
-			for contIndex, _ := range tmpContainers.Containers {
-				tmpContainers.Containers[contIndex].Volumes = []string{"volume:volume"}
-			}
-
 			hasError := false
-			err := tmpContainers.SetVolumes(tt.volume)
+			err := tt.expectedContainers.SetVolumes(tt.volume)
 			if err != nil {
 				hasError = true
 			}
 
-			for _, cont := range tmpContainers.Containers {
-				require.Equal(t, cont.HostConfig.Mounts, tt.expectedVolumes)
+			if tt.expectedErr == false {
+				for _, cont := range tt.expectedContainers.Containers {
+					require.Equal(t, cont.HostConfig.Mounts, tt.expectedVolumes)
+				}
 			}
 			require.Equal(t, tt.expectedErr, hasError)
 		})

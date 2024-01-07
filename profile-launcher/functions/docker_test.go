@@ -46,34 +46,8 @@ func TestDockerStartContainer(t *testing.T) {
 		expectedContainers Containers
 	}{
 		{"valid container launch", false, CreateTestContainers("", "")},
-		{"invalid container image", true, Containers{
-			InputSrc:     "",
-			TargetDevice: "",
-			Containers: []Container{{
-				Name:                     "OVMSClient",
-				DockerImage:              "",
-				Entrypoint:               "/script/entrypoint.sh",
-				EnvironmentVariableFiles: "profile.env",
-				Volumes:                  []string{"./test-profile:/test-profile"},
-			}}}},
-		{"invalid duplicate container names", true, Containers{
-			InputSrc:     "",
-			TargetDevice: "",
-			Containers: []Container{{
-				Name:                     "OVMSClient",
-				DockerImage:              "test:dev",
-				Entrypoint:               "/script/entrypoint.sh",
-				EnvironmentVariableFiles: "profile.env",
-				Volumes:                  []string{"./test-profile:/test-profile"},
-			},
-				{
-					Name:                     "OVMSClient",
-					DockerImage:              "test:dev",
-					Entrypoint:               "/script/entrypoint.sh",
-					EnvironmentVariableFiles: "profile.env",
-					Volumes:                  []string{"./test-profile:/test-profile"},
-				},
-			}}},
+		{"invalid container image", true, CreateTestContainersInvalidImage("", "")},
+		{"invalid duplicate container names", true, CreateTestContainersDuplicates("", "")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -116,7 +90,7 @@ func TestSetHostNetwork(t *testing.T) {
 		networkMode container.NetworkMode
 		ipcMode     container.IpcMode
 	}{
-		{"valid set host network", "./test-profile", container.NetworkMode("host"), container.IpcMode("host")},
+		{"valid set host network", testConfigDir, container.NetworkMode("host"), container.IpcMode("host")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,7 +118,8 @@ func TestCreateVolumeMount(t *testing.T) {
 		volume         string
 		expectedVolume mount.Mount
 	}{
-		{"valid with no input volumes", false, "./test-profile:/test", mount.Mount{Type: mount.TypeBind, Source: sourcePath, Target: "/test", ReadOnly: false}},
+		{"valid volume", false, "./test-profile:/test", mount.Mount{Type: mount.TypeBind, Source: sourcePath, Target: "/test", ReadOnly: false}},
+		{"invalid volume format", true, "./test-profile", mount.Mount{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
