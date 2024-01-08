@@ -149,20 +149,21 @@ func TestInitContainers(t *testing.T) {
 		inputSrc               string
 		volumes                []string
 		envOverrides           []string
+		renderMode             bool
 		expectedErr            bool
 		expectedContainers     functions.Containers
 		expectedContainerCount int
 	}{
-		{"valid with only flags", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
-		{"valid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV=def"}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
-		{"valid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{"./test-profile:/test-profile"}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
-		{"invalid no configdir set", "", "", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid config format", invalidConfig, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid missing env", invalidEnvFile, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid inputSrc not set", validYaml, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid targetDevice not set", validYaml, testConfigDir, "Fake", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV"}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
-		{"invalid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{testConfigDir}, []string{}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
+		{"valid with only flags", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{}, true, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"valid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV=def"}, false, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"valid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{"./test-profile:/test-profile"}, []string{}, false, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"invalid no configdir set", "", "", "", "", []string{}, []string{}, false, true, functions.Containers{}, 0},
+		{"invalid config format", invalidConfig, testConfigDir, "", "", []string{}, []string{}, false, true, functions.Containers{}, 0},
+		{"invalid missing env", invalidEnvFile, testConfigDir, "", "", []string{}, []string{}, false, true, functions.Containers{}, 0},
+		{"invalid inputSrc not set", validYaml, testConfigDir, "", "", []string{}, []string{}, false, true, functions.Containers{}, 0},
+		{"invalid targetDevice not set", validYaml, testConfigDir, "Fake", "", []string{}, []string{}, false, true, functions.Containers{}, 0},
+		{"invalid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV"}, false, true, CreateTestContainers("CPU", "/dev/video0"), 0},
+		{"invalid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{testConfigDir}, []string{}, false, true, CreateTestContainers("CPU", "/dev/video0"), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -171,7 +172,7 @@ func TestInitContainers(t *testing.T) {
 			tmpContainers.SetHostNetwork()
 
 			hasError := false
-			containersArray, err := InitContainers(tt.configDir, tt.targetDevice, tt.inputSrc, tt.volumes, tt.envOverrides)
+			containersArray, err := InitContainers(tt.configDir, tt.targetDevice, tt.inputSrc, tt.volumes, tt.envOverrides, tt.renderMode)
 			if err != nil {
 				hasError = true
 

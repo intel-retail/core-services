@@ -46,6 +46,7 @@ func main() {
 	var configDir string
 	var targetDevice string
 	var inputSrc string
+	var renderMode bool
 	if flag.Lookup("configdir") == nil {
 		flag.StringVar(&configDir, "configdir", "./test-profile/valid-profile", "Directory with the profile config")
 	}
@@ -61,9 +62,12 @@ func main() {
 	if flag.Lookup("e") == nil {
 		flag.Var(&envOverrides, "e", "Environment overridees for the container")
 	}
+	if flag.Lookup("render_mode") == nil {
+		flag.BoolVar(&renderMode, "render_mode", false, "Enable render mode when set to 1.")
+	}
 	flag.Parse()
 
-	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides)
+	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides, renderMode)
 	if err != nil {
 		fmt.Errorf("Failed to run contaienrs %v", err)
 
@@ -75,7 +79,7 @@ func main() {
 	return
 }
 
-func InitContainers(configDir string, targetDevice string, inputSrc string, volumes []string, envOverrides []string) (functions.Containers, error) {
+func InitContainers(configDir string, targetDevice string, inputSrc string, volumes []string, envOverrides []string, renderMode bool) (functions.Containers, error) {
 	// Load yaml config
 	containersArray, yamlErr := functions.GetYamlConfig(configDir)
 	if yamlErr != nil {
@@ -86,6 +90,13 @@ func InitContainers(configDir string, targetDevice string, inputSrc string, volu
 		return functions.Containers{}, fmt.Errorf("Failed to load ENV file %v", err)
 	}
 	containersArray.SetHostNetwork()
+
+	if renderMode == true {
+		for contIndex, _ := range containersArray.Containers {
+			containersArray.Containers[contIndex].Envs = append(containersArray.Containers[contIndex].Envs, "DISPLAY=$DISPLAY")
+			containersArray.Containers[contIndex].Volumes = append(containersArray.Containers[contIndex].Volumes, "/tmp/.X11-unix:/tmp/.X11-unix")
+		}
+	}
 
 	// Set ENV overrides if any exist
 	if len(envOverrides) > 0 {
