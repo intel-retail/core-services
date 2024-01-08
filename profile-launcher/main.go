@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------------
-// Copyright 2023 Intel Corp.
+// Copyright 2024 Intel Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,40 +19,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"gopkg.in/yaml.v3"
+	"github.com/intel-retail/core-services/profile-launcher/functions"
 )
-
-// A TEST RUN STRING
-// go run main.go -e TEST_ENV=aaa,NEW=abc --configdir /use-cases/dlstreamer/res --inputsrc /dev/video4 --target_device CPU
-
-type Containers struct {
-	Containers   []Container `yaml:"Containers"`
-	InputSrc     string      `yaml:"InputSrc"`
-	TargetDevice string      `yaml:"TargetDevice"`
-}
-
-type Container struct {
-	Name                     string               `yaml:"Name"`
-	DockerImage              string               `yaml:"DockerImage"`
-	EnvironmentVariableFiles string               `yaml:"EnvironmentVariableFiles"`
-	Envs                     []string             `yaml:"Envs"`
-	Volumes                  []string             `yaml:"Volumes"`
-	Entrypoint               string               `yaml:"Entrypoint"`
-	HostConfig               container.HostConfig `yaml:"HostConfig"`
-}
 
 // Array flag when variables can be used multiple times
 type arrayFlags []string
@@ -66,255 +38,106 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
-var envOverrides arrayFlags
-var volumes arrayFlags
-
 type envOverrideFlags []string
 
 func main() {
+	var envOverrides arrayFlags
+	var volumes arrayFlags
 	var configDir string
 	var targetDevice string
 	var inputSrc string
-	flag.StringVar(&configDir, "configdir", "./test-profile", "Directory with the profile config")
-	flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
-	flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
-	flag.Var(&volumes, "v", "Volume mount for the container")
-	flag.Var(&envOverrides, "e", "Environment overridees for the container")
+	var renderMode bool
+	if flag.Lookup("configdir") == nil {
+		flag.StringVar(&configDir, "configdir", "./test-profile/valid-profile", "Directory with the profile config")
+	}
+	if flag.Lookup("target_device") == nil {
+		flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
+	}
+	if flag.Lookup("inputsrc") == nil {
+		flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
+	}
+	if flag.Lookup("v") == nil {
+		flag.Var(&volumes, "v", "Volume mount for the container")
+	}
+	if flag.Lookup("e") == nil {
+		flag.Var(&envOverrides, "e", "Environment overridees for the container")
+	}
+	if flag.Lookup("render_mode") == nil {
+		flag.BoolVar(&renderMode, "render_mode", false, "Enable render mode when set to 1.")
+	}
 	flag.Parse()
 
+	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides, renderMode)
+	if err != nil {
+		fmt.Errorf("Failed to run contaienrs %v", err)
+
+	}
+
+	if runErr := RunContainers(containersArray); runErr != nil {
+		fmt.Errorf("Failed to run contaienrs %v", runErr)
+	}
+	return
+}
+
+func InitContainers(configDir string, targetDevice string, inputSrc string, volumes []string, envOverrides []string, renderMode bool) (functions.Containers, error) {
 	// Load yaml config
-	containersArray := GetYamlConfig(configDir)
+	containersArray, yamlErr := functions.GetYamlConfig(configDir)
+	if yamlErr != nil {
+		return functions.Containers{}, fmt.Errorf("Failed to load yaml config %v", yamlErr)
+	}
 	// Load ENV from .env file
 	if err := containersArray.GetEnv(configDir); err != nil {
-		fmt.Errorf("Failed to load ENV file", err)
-		os.Exit(-1)
+		return functions.Containers{}, fmt.Errorf("Failed to load ENV file %v", err)
 	}
 	containersArray.SetHostNetwork()
+
+	if renderMode == true {
+		for contIndex, _ := range containersArray.Containers {
+			containersArray.Containers[contIndex].Envs = append(containersArray.Containers[contIndex].Envs, "DISPLAY=$DISPLAY")
+			containersArray.Containers[contIndex].Volumes = append(containersArray.Containers[contIndex].Volumes, "/tmp/.X11-unix:/tmp/.X11-unix")
+		}
+	}
 
 	// Set ENV overrides if any exist
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
 		if err := containersArray.OverrideEnv(envOverrides); err != nil {
-			fmt.Errorf("Failed to over ride input ENV values", err)
-			os.Exit(-1)
+			return functions.Containers{}, err
 		}
 	}
 
 	// Set Volumes
 	if err := containersArray.SetVolumes(volumes); err != nil {
-		fmt.Errorf("Failed to load Volumes from config file", err)
-		os.Exit(-1)
+		return functions.Containers{}, err
 	}
 
 	// Set the target device ENV
 	containersArray.TargetDevice = targetDevice
-	containersArray.SetTargetDevice()
-	// Set the input source
-	containersArray.InputSrc = inputSrc
-	containersArray.SetInputSrc()
-
-	if inputSrc == "" {
-		fmt.Errorf("InputSrc was not set. Exiting profile launcher.")
-		os.Exit(-1)
+	if err := containersArray.SetTargetDevice(); err != nil {
+		return functions.Containers{}, err
 	}
 
-	containersArray2, _ := json.Marshal(containersArray)
-	fmt.Println(string(containersArray2))
+	// Set the input source
+	containersArray.InputSrc = inputSrc
+	if err := containersArray.SetInputSrc(); err != nil {
+		return functions.Containers{}, err
+	}
 
+	return containersArray, nil
+}
+
+func RunContainers(containersArray functions.Containers) error {
 	// Setup Docker CLI
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer cli.Close()
 
 	// Run each container found in config
-	containersArray.DockerStartContainer(ctx, cli)
-}
-
-func GetYamlConfig(configDir string) Containers {
-	profileConfigPath := filepath.Join(configDir, "profile_config.yaml")
-	contents, err := os.ReadFile(profileConfigPath)
-	if err != nil {
-		err = fmt.Errorf("Unable to read config file: %v, error: %v",
-			configDir, err)
-	}
-
-	containersArray := Containers{}
-	err = yaml.Unmarshal(contents, &containersArray)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-
-	return containersArray
-}
-
-func (containerArray *Containers) GetEnv(configDir string) error {
-	for i, cont := range containerArray.Containers {
-		profileConfigPath := filepath.Join(configDir, cont.EnvironmentVariableFiles)
-		contents, err := os.ReadFile(profileConfigPath)
-		if err != nil {
-			err = fmt.Errorf("Unable to read config file: %v, error: %v",
-				configDir, err)
-			return err
-		}
-		containerArray.Containers[i].Envs = strings.Split(string(contents[:]), "\n")
-		// Set Target Device ENV
-		if containerArray.TargetDevice != "" {
-			containerArray.Containers[i].Envs = append(containerArray.Containers[i].Envs, containerArray.TargetDevice)
-		}
+	if err := containersArray.DockerStartContainer(ctx, cli); err != nil {
+		return err
 	}
 	return nil
-}
-
-func (containerArray *Containers) OverrideEnv(envOverrides []string) error {
-	for contIndex, cont := range containerArray.Containers {
-		for _, override := range envOverrides {
-			notFound := true
-			overrideArray := strings.Split(override, "=")
-			if override != "" && len(overrideArray) == 2 {
-				for envIndex, env := range cont.Envs {
-					if strings.Contains(env, overrideArray[0]+"=") {
-						containerArray.Containers[contIndex].Envs[envIndex] = override
-						notFound = false
-					}
-				}
-				if notFound {
-					containerArray.Containers[contIndex].Envs = append(containerArray.Containers[contIndex].Envs, override)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (containerArray *Containers) SetVolumes(volumes []string) error {
-	var volumeMountParam []mount.Mount
-	for _, vol := range volumes {
-		tmpVol, err := CreateVolumeMount(vol)
-		if err != nil {
-			return fmt.Errorf("Failed to create volume mount")
-		}
-		volumeMountParam = append(volumeMountParam, tmpVol)
-	}
-
-	for contIndex, cont := range containerArray.Containers {
-		for _, vol := range cont.Volumes {
-			tmpVol, err := CreateVolumeMount(vol)
-			if err != nil {
-				return fmt.Errorf("Failed to create volume mount")
-			}
-			containerArray.Containers[contIndex].HostConfig.Mounts = append(containerArray.Containers[contIndex].HostConfig.Mounts, tmpVol)
-		}
-		containerArray.Containers[contIndex].HostConfig.Mounts = append(containerArray.Containers[contIndex].HostConfig.Mounts, volumeMountParam...)
-	}
-
-	return nil
-}
-
-func CreateVolumeMount(vol string) (mount.Mount, error) {
-	volSplit := strings.Split(vol, ":")
-	sourcePath, err := filepath.Abs(volSplit[0])
-	if err != nil {
-		return mount.Mount{}, fmt.Errorf("Failed to get volume path", err)
-	}
-
-	return mount.Mount{
-		Type:     mount.TypeBind,
-		Source:   sourcePath,
-		Target:   volSplit[1],
-		ReadOnly: false,
-	}, nil
-}
-
-// Setup device mounts and ENV based on the targe device input
-func (containerArray *Containers) SetTargetDevice() error {
-	if containerArray.TargetDevice == "" {
-		containerArray.SetPrivileged()
-	} else if containerArray.TargetDevice == "CPU" {
-		// CPU do nothing
-		return nil
-	} else if containerArray.TargetDevice == "GPU" ||
-		strings.Contains(containerArray.TargetDevice, "MULTI") ||
-		containerArray.TargetDevice == "AUTO" {
-		// GPU set to privileged so we can access all GPU
-		containerArray.SetPrivileged()
-	} else if strings.Contains(containerArray.TargetDevice, "GPU.") {
-		// GPU.X set access to a specific GPU device and set the correct ENV
-		TargetDeviceArray := strings.Split(containerArray.TargetDevice, ".")
-		DeviceNum, errNum := strconv.Atoi(TargetDeviceArray[1])
-		if errNum != nil {
-			return errNum
-		}
-		TargetDeviceNum := 128 + DeviceNum
-		TargetGpu := "GPU." + strconv.Itoa(TargetDeviceNum)
-		// Set GPU Device
-		containerArray.SetHostDevice("/dev/dri/renderD\"" + TargetGpu)
-	} else {
-		return fmt.Errorf("Target device not supported")
-	}
-	return nil
-}
-
-// Set the container to privileged mode
-func (containerArray *Containers) SetPrivileged() {
-	for contIndex, _ := range containerArray.Containers {
-		containerArray.Containers[contIndex].HostConfig.Privileged = true
-	}
-}
-
-// Set container to use host network
-func (containerArray *Containers) SetHostNetwork() {
-	for contIndex, _ := range containerArray.Containers {
-		containerArray.Containers[contIndex].HostConfig.NetworkMode = "host"
-		containerArray.Containers[contIndex].HostConfig.IpcMode = "host"
-	}
-}
-
-// Setup the device mount
-func (containerArray *Containers) SetHostDevice(device string) {
-	deviceMount := container.DeviceMapping{
-		PathOnHost:        device,
-		PathInContainer:   device,
-		CgroupPermissions: "rwm",
-	}
-
-	for contIndex, _ := range containerArray.Containers {
-		containerArray.Containers[contIndex].HostConfig.Devices = append(containerArray.Containers[contIndex].HostConfig.Devices, deviceMount)
-	}
-}
-
-// Setup devices and other mounts based on the inputsrc
-func (containerArray *Containers) SetInputSrc() {
-	if strings.Contains(containerArray.InputSrc, "/video") {
-		containerArray.SetHostDevice(containerArray.InputSrc)
-	}
-
-	for contIndex, _ := range containerArray.Containers {
-		containerArray.Containers[contIndex].Envs = append(containerArray.Containers[contIndex].Envs, "INPUTSRC="+containerArray.InputSrc)
-	}
-}
-
-// Create and start the Docker container
-func (containerArray *Containers) DockerStartContainer(ctx context.Context, cli *client.Client) {
-	for _, cont := range containerArray.Containers {
-		fmt.Println("Starting Docker Container")
-		fmt.Printf("%+v\n", cont)
-
-		resp, err := cli.ContainerCreate(ctx, &container.Config{
-			Image:      cont.DockerImage,
-			Env:        cont.Envs,
-			Entrypoint: strings.Split(cont.Entrypoint, " "),
-		},
-			&cont.HostConfig,
-			nil, nil, cont.Name)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-			panic(err)
-		}
-	}
 }
