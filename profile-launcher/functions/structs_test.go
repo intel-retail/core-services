@@ -17,7 +17,7 @@
 
 package functions
 
-var testConfigDir = "../test-profile"
+var testConfigDir = "../test-profile/valid-profile"
 var testInvalidConfigDir = "../test-profile/invalid-test-profile"
 var testInvalidFormatDir = "../test-profile/invalid-format-profile"
 

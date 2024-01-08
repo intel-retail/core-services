@@ -46,7 +46,7 @@ func main() {
 	var configDir string
 	var targetDevice string
 	var inputSrc string
-	flag.StringVar(&configDir, "configdir", "./test-profile", "Directory with the profile config")
+	flag.StringVar(&configDir, "configdir", "./test-profile/valid-profile", "Directory with the profile config")
 	flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
 	flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
 	flag.Var(&volumes, "v", "Volume mount for the container")

@@ -40,18 +40,59 @@ func CreateTestContainers(inputSrc string, targetDevice string) functions.Contai
 			EnvironmentVariableFiles: "profile.env",
 			Volumes:                  []string{"./test-profile:/test-profile"},
 			Envs:                     []string{"TEST_ENV=123", "TEST_ENV2=abc", "INPUTSRC=/dev/video0"},
-		},
-			{
-				Name:                     "Server",
-				DockerImage:              "test:dev",
-				Entrypoint:               "/script/entrypoint2.sh",
-				EnvironmentVariableFiles: "profile2.env",
-				Volumes:                  []string{"./test-profile:/test-profile"},
-				Envs:                     []string{"NEW_ENV=456", "NEW_2ENV=efg", "INPUTSRC=/dev/video0"},
-			}},
+		}},
 	}
 }
 
+const (
+	testConfigDir = "./test-profile/main-test-profile"
+	validYaml     = `Containers:
+    - Name: Client
+      DockerImage: test:dev
+      EnvironmentVariableFiles: profile.env
+      Entrypoint: /script/entrypoint.sh
+      Volumes: 
+        - ./test-profile:/test-profile`
+	invalidImageYaml = `Containers:
+    - Name: Client
+      DockerImage: ""
+      EnvironmentVariableFiles: profile.env
+      Entrypoint: /script/entrypoint.sh
+      Volumes: 
+        - ./test-profile:/test-profile`
+	duplicateNameYaml = `Containers:
+    - Name: Client
+      DockerImage: test:dev
+      EnvironmentVariableFiles: profile.env
+      Entrypoint: /script/entrypoint.sh
+      Volumes: 
+        - ./test-profile/invalid-test-profile:/test-profile
+	- Name: Client
+      DockerImage: test:dev
+      EnvironmentVariableFiles: profile.env
+      Entrypoint: /script/entrypoint.sh
+      Volumes: 
+        - ./test-profile/invalid-test-profile:/test-profile`
+	invalidEnvFile = `Containers:
+    - Name: Client
+      DockerImage: ""
+      EnvironmentVariableFiles: fake.env
+      Entrypoint: /script/entrypoint.sh
+      Volumes: 
+        - ./test-profile:/test-profile`
+	invalidConfig = `invalid`
+)
+
+func WriteYamlConfig(yamlString string) error {
+	yamlByte := []byte(yamlString)
+	err := os.WriteFile("./test-profile/main-test-profile/profile_config.yaml", yamlByte, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TestMain: test the main function
 func TestMain(t *testing.T) {
 	// Setup Docker CLI
 	ctx := context.Background()
@@ -61,18 +102,19 @@ func TestMain(t *testing.T) {
 	}
 	defer cli.Close()
 
+	os.Args = append(os.Args, []string{"--configdir", "./test-profile/main-test-profile", "--inputsrc", "/dev/video0", "--target_device", "CPU", "-e", "test=123", "-v", "./test-profile:/test"}...)
 	tests := []struct {
 		name               string
-		args               []string
+		profile            string
 		expectedContainers functions.Containers
 	}{
-		// {"valid container launch", []string{"--configdir", "./test-profile", "--inputsrc", "/dev/video0", "--target_device", "CPU", "-e", "test=123", "-v", "./test-profile:/test"}, CreateTestContainers("", "")},
-		// {"invalid container init", []string{"--configdir", "./test-profile/invalid-format-profile"}, functions.Containers{}},
-		{"invalid container run", []string{"--configdir", "./test-profile/invalid-image-profile", "--inputsrc", "/dev/video0"}, functions.Containers{Containers: []functions.Container{{Name: "Client"}}}},
+		// {"valid container launch", validYaml, CreateTestContainers("", "")},
+		// {"invalid container init", invalidImageYaml, functions.Containers{}},
+		{"invalid container init", duplicateNameYaml, functions.Containers{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Args = append(os.Args, tt.args...)
+			require.NoError(t, WriteYamlConfig(tt.profile))
 			main()
 
 			containerList, err := cli.ContainerList(ctx, types.ContainerListOptions{All: true})
@@ -98,14 +140,11 @@ func TestMain(t *testing.T) {
 	}
 }
 
-func MainTestRun() {
-
-}
-
 // TestInitContainers: test creating thhasError := false container struct
 func TestInitContainers(t *testing.T) {
 	tests := []struct {
 		name                   string
+		profile                string
 		configDir              string
 		targetDevice           string
 		inputSrc               string
@@ -115,19 +154,20 @@ func TestInitContainers(t *testing.T) {
 		expectedContainers     functions.Containers
 		expectedContainerCount int
 	}{
-		{"valid with only flags", "./test-profile", "CPU", "/dev/video0", []string{}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 2},
-		{"valid with env overrides", "./test-profile", "CPU", "/dev/video0", []string{}, []string{"TEST_ENV=def"}, false, CreateTestContainers("CPU", "/dev/video0"), 2},
-		{"valid with volume input", "./test-profile", "CPU", "/dev/video0", []string{"./test-profile:/test-profile"}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 2},
-		{"invalid no configdir set", "", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid config format", "./test-profile/invalid-test-profile", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid miussing env", "./test-profile/invalid-missing-env", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid inputSrc not set", "./test-profile", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid targetDevice not set", "./test-profile", "Fake", "", []string{}, []string{}, true, functions.Containers{}, 0},
-		{"invalid with env overrides", "./test-profile", "CPU", "/dev/video0", []string{}, []string{"TEST_ENV"}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
-		{"invalid with volume input", "./test-profile", "CPU", "/dev/video0", []string{"./test-profile"}, []string{}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
+		{"valid with only flags", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"valid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV=def"}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"valid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{"./test-profile:/test-profile"}, []string{}, false, CreateTestContainers("CPU", "/dev/video0"), 1},
+		{"invalid no configdir set", "", "", "", "", []string{}, []string{}, true, functions.Containers{}, 0},
+		{"invalid config format", invalidConfig, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
+		{"invalid missing env", invalidEnvFile, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
+		{"invalid inputSrc not set", validYaml, testConfigDir, "", "", []string{}, []string{}, true, functions.Containers{}, 0},
+		{"invalid targetDevice not set", validYaml, testConfigDir, "Fake", "", []string{}, []string{}, true, functions.Containers{}, 0},
+		{"invalid with env overrides", validYaml, testConfigDir, "CPU", "/dev/video0", []string{}, []string{"TEST_ENV"}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
+		{"invalid with volume input", validYaml, testConfigDir, "CPU", "/dev/video0", []string{testConfigDir}, []string{}, true, CreateTestContainers("CPU", "/dev/video0"), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, WriteYamlConfig(tt.profile))
 			tmpContainers := CreateTestContainers("", "")
 			tmpContainers.SetHostNetwork()
 

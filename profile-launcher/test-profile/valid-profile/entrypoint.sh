@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-echo test env $NEW_ENV
-echo test 2 env $NEW_2ENV
+echo test env $TEST_ENV
+echo test 2 env $TEST_ENV2
 echo test new $NEW
-ls /test-profile

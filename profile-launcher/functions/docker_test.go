@@ -109,7 +109,7 @@ func TestSetHostNetwork(t *testing.T) {
 // TestCreateVolumeMount: test creating volume mount structs
 func TestCreateVolumeMount(t *testing.T) {
 	// Get absolute path for test profile
-	sourcePath, err := filepath.Abs("./test-profile")
+	sourcePath, err := filepath.Abs("./test-profile/valid-profile")
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -118,8 +118,8 @@ func TestCreateVolumeMount(t *testing.T) {
 		volume         string
 		expectedVolume mount.Mount
 	}{
-		{"valid volume", false, "./test-profile:/test", mount.Mount{Type: mount.TypeBind, Source: sourcePath, Target: "/test", ReadOnly: false}},
-		{"invalid volume format", true, "./test-profile", mount.Mount{}},
+		{"valid volume", false, "./test-profile/valid-profile:/test", mount.Mount{Type: mount.TypeBind, Source: sourcePath, Target: "/test", ReadOnly: false}},
+		{"invalid volume format", true, "./test-profile/valid-profile", mount.Mount{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
