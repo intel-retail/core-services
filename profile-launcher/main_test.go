@@ -66,13 +66,13 @@ const (
       EnvironmentVariableFiles: profile.env
       Entrypoint: /script/entrypoint.sh
       Volumes: 
-        - ./test-profile/invalid-test-profile:/test-profile
-	- Name: Client
+        - ./test-profile/main-test-profile:/test-profile
+    - Name: Client
       DockerImage: test:dev
       EnvironmentVariableFiles: profile.env
       Entrypoint: /script/entrypoint.sh
       Volumes: 
-        - ./test-profile/invalid-test-profile:/test-profile`
+        - ./test-profile/main-test-profile:/test-profile`
 	invalidEnvFile = `Containers:
     - Name: Client
       DockerImage: ""
@@ -108,9 +108,8 @@ func TestMain(t *testing.T) {
 		profile            string
 		expectedContainers functions.Containers
 	}{
-		// {"valid container launch", validYaml, CreateTestContainers("", "")},
-		// {"invalid container init", invalidImageYaml, functions.Containers{}},
 		{"invalid container init", duplicateNameYaml, functions.Containers{}},
+		{"invalid container init", invalidImageYaml, functions.Containers{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

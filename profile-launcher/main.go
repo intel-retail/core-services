@@ -46,11 +46,21 @@ func main() {
 	var configDir string
 	var targetDevice string
 	var inputSrc string
-	flag.StringVar(&configDir, "configdir", "./test-profile/valid-profile", "Directory with the profile config")
-	flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
-	flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
-	flag.Var(&volumes, "v", "Volume mount for the container")
-	flag.Var(&envOverrides, "e", "Environment overridees for the container")
+	if flag.Lookup("configdir") == nil {
+		flag.StringVar(&configDir, "configdir", "./test-profile/valid-profile", "Directory with the profile config")
+	}
+	if flag.Lookup("target_device") == nil {
+		flag.StringVar(&targetDevice, "target_device", "", "Device you are targeting to run on. Default is CPU.")
+	}
+	if flag.Lookup("inputsrc") == nil {
+		flag.StringVar(&inputSrc, "inputsrc", "", "Input for the profile to use.")
+	}
+	if flag.Lookup("v") == nil {
+		flag.Var(&volumes, "v", "Volume mount for the container")
+	}
+	if flag.Lookup("e") == nil {
+		flag.Var(&envOverrides, "e", "Environment overridees for the container")
+	}
 	flag.Parse()
 
 	containersArray, err := InitContainers(configDir, targetDevice, inputSrc, volumes, envOverrides)
