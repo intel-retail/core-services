@@ -8,4 +8,3 @@
 echo test env $NEW_ENV
 echo test 2 env $NEW_2ENV
 echo test new $NEW
-ls /test-profile
