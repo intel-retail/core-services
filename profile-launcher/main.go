@@ -98,6 +98,10 @@ func InitContainers(configDir string, targetDevice string, inputSrc string, volu
 		}
 	}
 
+	if targetDevice != "" {
+		envOverrides = append(envOverrides, "TARGET_DEVICE="+targetDevice)
+	}
+
 	// Set ENV overrides if any exist
 	if len(envOverrides) > 0 {
 		fmt.Println("Override Env")
