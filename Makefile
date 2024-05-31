@@ -8,6 +8,8 @@ build-profile-launcher:
 	@cd ./profile-launcher && $(MAKE) build
 
 build-capi-python:
+	git clone https://github.com/openvinotoolkit/model_server
+	cd model_server && CHECK_COVERAGE=0 RUN_TESTS=0 make ovms_builder_image
 	docker build -f capi_python/Dockerfile -t capi_python_bind:dev .
 
 run:
