@@ -14,5 +14,8 @@ RUN bazel build --jobs=8 //src/capi-python:ovmspybind.so
 
 RUN mkdir -p /output && find / -name "ovmspybind.so" -exec cp "{}" /output/ovmspybind.so  \;
 
+RUN find / -name "ovmspybind.so" -exec cp "{}" /model_server/src/capi-python/ovmspybind.so  \;
+WORKDIR /model_server/src/capi-python
+
 FROM scratch as bin
 COPY --from=builder /output/ovmspybind.so /

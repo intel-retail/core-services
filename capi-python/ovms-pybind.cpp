@@ -1,5 +1,5 @@
 //*****************************************************************************
-// Copyright 2023 Intel Corporation
+// Copyright 2024 Intel Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,11 +42,6 @@ ovms::ModelsSettingsImpl ModelSettingsNew(){
     return modelSettings;
 }
 
-// Status ServerStart(Server server, ServerSettingsImpl serverSettings, ModelsSettingsImpl modelsSettings){
-//     Status resultsStatus = server.start(&serverSettings, &modelsSettings);
-//     return resultsStatus;
-// }
-
 PYBIND11_MODULE(ovmspybind, m) {
     py::class_<ServerSettingsImpl>(m, "ServerSettingsImpl")
         .def(py::init<>()) // <-- bind the default constructor
@@ -68,5 +63,4 @@ PYBIND11_MODULE(ovmspybind, m) {
         .def_static("instance", &Server::instance, py::return_value_policy::reference)
         .def("start", py::overload_cast<ServerSettingsImpl*, ModelsSettingsImpl*>(&Server::start))
         .def("isLive", &Server::isLive);
-        // .def("ServerStart", &ServerStart);
 }

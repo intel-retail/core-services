@@ -1,3 +1,9 @@
+#
+# Copyright (C) 2024 Intel Corporation.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, './')

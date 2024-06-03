@@ -12,10 +12,10 @@ ovms-build-image:
 	cd model_server && CHECK_COVERAGE=0 RUN_TESTS=0 make ovms_builder_image
 
 build-capi-python:
-	docker build -f capi-python/Dockerfile -t capi-python_bind:dev --target bin --output=. .
+	docker build -f capi-python/Dockerfile -t capi-python-bind:dev --target bin --output=. .
 
 download-example-model:
 	cd capi-python && ./downloadExampleModel.sh
 
 run:download-example-model
-	docker run -it --rm -v ./capi-python:/tmp/project --entrypoint /bin/bash capi_python_bind:dev
+	docker run -it --rm -v ./capi-python:/tmp/project --entrypoint /bin/bash capi-python-bind:dev
