@@ -6,3 +6,4 @@ profile-launcher/profile-launcher
 smoke_tests_output.log
 profile-launcher/*.out
 model_server
+capi-python/yolov5s

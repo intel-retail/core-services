@@ -1,7 +1,7 @@
 # Copyright © 2023 Intel Corporation. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build-profile-launcher build-capi-python
+.PHONY: build-profile-launcher ovms-build-image build-capi-python run
 
 build-profile-launcher:
 	@mkdir -p ./results || true
@@ -14,5 +14,8 @@ ovms-build-image:
 build-capi-python:
 	docker build -f capi-python/Dockerfile -t capi-python_bind:dev --target bin --output=. .
 
-run:
+download-example-model:
+	cd capi-python && ./downloadExampleModel.sh
+
+run:download-example-model
 	docker run -it --rm -v ./capi-python:/tmp/project --entrypoint /bin/bash capi_python_bind:dev
