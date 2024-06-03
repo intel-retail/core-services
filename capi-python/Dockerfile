@@ -1,4 +1,9 @@
-# FROM openvino/model_server:2024.1-gpu
+#
+# Copyright (C) 2024 Intel Corporation.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 FROM openvino/model_server-build:latest AS builder
 
 USER root
