@@ -3,6 +3,7 @@ import sys
 sys.path.insert(1, './')
 
 import ovmspybind
+import time
 
 serverSet = ovmspybind.ServerSettingsNew()
 print(serverSet.grpcPort)
@@ -11,7 +12,7 @@ print(serverSet.grpcPort)
 
 modelSet = ovmspybind.ModelSettingsNew()
 print(modelSet.configPath)
-modelSet.configPath = "src/python/capi_python/config.json"
+modelSet.configPath = "config.json"
 print(modelSet.configPath)
 
 status = ovmspybind.StatusCode.OK
@@ -24,4 +25,8 @@ print(server)
 print(server.isLive())
 startStatus = server.start(serverSet, modelSet)
 print(startStatus.getCode())
-print(server.isLive())
+
+while True:
+    print(server.isLive())
+    time.sleep(5)
+

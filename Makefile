@@ -12,7 +12,7 @@ ovms-build-image:
 	cd model_server && CHECK_COVERAGE=0 RUN_TESTS=0 make ovms_builder_image
 
 build-capi-python:
-	docker build -f capi_python/Dockerfile -t capi_python_bind:dev .
+	docker build -f capi-python/Dockerfile -t capi-python_bind:dev --target bin --output=. .
 
 run:
-	docker run -it --rm --entrypoint /bin/bash capi_python_bind:dev
+	docker run -it --rm -v ./capi-python:/tmp/project --entrypoint /bin/bash capi_python_bind:dev
