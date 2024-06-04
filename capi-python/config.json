@@ -3,7 +3,7 @@
         {
             "config": {
               "name": "yolov5s",
-              "base_path": "models/yolov5s/FP16-INT8",
+              "base_path": "yolov5s/FP16-INT8",
               "layout": "NHWC:NCHW",
               "shape": "(1,416,416,3)",
               "nireq": 1,

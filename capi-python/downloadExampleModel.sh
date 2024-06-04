@@ -37,7 +37,7 @@ downloadYolov5sFP16INT8() {
     yolojson="yolo-v5"
 
     # checking whether the model file .bin already exists or not before downloading
-    yolov5ModelFile="models/$yolov5s/$modelPrecisionFP16INT8/1/$yolov5s.bin"
+    yolov5ModelFile="$yolov5s/$modelPrecisionFP16INT8/1/$yolov5s.bin"
     if [ -f "$yolov5ModelFile" ]; then
         echo "yolov5s $modelPrecisionFP16INT8 model already exists in $yolov5ModelFile, skip downloading..."
     else

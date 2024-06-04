@@ -18,4 +18,5 @@ download-example-model:
 	cd capi-python && ./downloadExampleModel.sh
 
 run:download-example-model
+	docker build -f capi-python/Dockerfile --target builder -t capi-python-bind:dev .
 	docker run -it --rm -v ./capi-python:/tmp/project --entrypoint /bin/bash capi-python-bind:dev
