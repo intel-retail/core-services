@@ -1,14 +1,13 @@
 name: reviewdog
 on: 
-  pull_request_target:
-    types: [labeled]
+  pull_request:
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 
 jobs:
   reviewdog:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'safe to test')
     permissions:
       contents: read
       pull-requests: write
