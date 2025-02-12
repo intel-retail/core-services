@@ -44,11 +44,6 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 4. Install Dependencies
-```bash
-pip install -r requirements.txt 
-```
-
 ## Usage
 
 ### [Option 1] Makefile Instructions
